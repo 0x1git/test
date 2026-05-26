@@ -1,25 +1,49 @@
-from google import genai
-from google.genai import types
+<?php
+require_once 'config.php';
 
-config = types.GenerateContentConfig(
-    tools=[types.Tool(google_search=types.GoogleSearch())]
-)
+function verifyStaffSession() {
+    session_start();
+    if (!isset($_SESSION['staff_id'])) {
+        header('Location: /login.php');
+        exit;
+    }
+    
+    // Check session timeout (8 hour shift)
+    if (time() - $_SESSION['last_activity'] > 28800) {
+        session_destroy();
+        header('Location: /login.php?timeout=1');
+        exit;
+    }
+    $_SESSION['last_activity'] = time();
+}
 
-response = client.models.generate_content(
-    model="gemini-3.5-flash",
-    contents="Who won the euro 2024?",
-    config=config
-)
+function getStaffPermissions($staffId) {
+    global $db;
+    $stmt = $db->prepare("SELECT permissions FROM staff WHERE id = ?");
+    $stmt->execute([$staffId]);
+    return $stmt->fetchColumn();
+}<?php
+require_once 'config.php';
 
-print(response.text)
+function verifyStaffSession() {
+    session_start();
+    if (!isset($_SESSION['staff_id'])) {
+        header('Location: /login.php');
+        exit;
+    }
+    
+    // Check session timeout (8 hour shift)
+    if (time() - $_SESSION['last_activity'] > 28800) {
+        session_destroy();
+        header('Location: /login.php?timeout=1');
+        exit;
+    }
+    $_SESSION['last_activity'] = time();
+}
 
-metadata = response.candidates[0].grounding_metadata
-if metadata.web_search_queries:
-    print("\nSearch queries executed:")
-    for query in metadata.web_search_queries:
-        print(f" - {query}")
-
-if metadata.grounding_chunks:
-    print("\nSources:")
-    for chunk in metadata.grounding_chunks:
-        print(f" - [{chunk.web.title}]({chunk.web.uri})")
+function getStaffPermissions($staffId) {
+    global $db;
+    $stmt = $db->prepare("SELECT permissions FROM staff WHERE id = ?");
+    $stmt->execute([$staffId]);
+    return $stmt->fetchColumn();
+}
