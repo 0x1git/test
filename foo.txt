@@ -1,7 +1,0 @@
-/usr/bin/fish
-sssss
-
-knkk
-snsjssss
-random change for pull request
-another random change for pull request 2
