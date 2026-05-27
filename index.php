@@ -21,7 +21,7 @@ $terminal = $_SESSION['assigned_terminal'];
 <body>
     <div class="dashboard">
         <h1>Welcome, <?php echo htmlspecialchars($staffName); ?></h1>
-        <p>Terminal: <?php echo htmlspecialchars($terminal); ?></p>
+        <p>Terminal: <?php echo ($terminal); ?></p>
         <nav>
             <a href="flights.php">Flight Management</a>
             <a href="preview_pass.php">Boarding Pass Preview</a>
