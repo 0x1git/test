@@ -219,11 +219,19 @@ $flightCount = count($flights);
             <p class="muted"><?php echo number_format($flightCount); ?> upcoming flight<?php echo $flightCount === 1 ? '' : 's'; ?> match your filters.</p>
 
             <?php if ($flights): ?>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px;">
+                    <div>
+                        <label class="muted">Live updates</label>
+                        <button id="refreshBtn" class="button-secondary" style="margin-left:8px;padding:8px 12px;">Refresh</button>
+                    </div>
+                    <div class="muted">Auto-refresh every <span id="intervalLabel">15</span>s</div>
+                </div>
+
                 <table class="flight-table">
                     <thead>
                         <tr><th>Flight</th><th>Destination</th><th>Gate</th><th>Status</th><th>Departure</th><th>Actions</th></tr>
                     </thead>
-                    <tbody>
+                    <tbody id="flight-table-body">
                         <?php foreach ($flights as $flight): ?>
                             <tr>
                                 <td data-label="Flight"><?php echo htmlspecialchars($flight['flight_number']); ?></td>
@@ -231,7 +239,11 @@ $flightCount = count($flights);
                                 <td data-label="Gate"><?php echo htmlspecialchars($flight['gate']); ?></td>
                                 <td data-label="Status"><span class="status"><?php echo htmlspecialchars($flight['status']); ?></span></td>
                                 <td data-label="Departure"><?php echo htmlspecialchars(date('H:i', strtotime($flight['departure_time']))); ?></td>
-                                <td data-label="Actions"><a href="manage_passengers.php?flight=<?php echo urlencode($flight['id']); ?>">Manage</a></td>
+                                <td data-label="Actions">
+                                    <a href="manage_passengers.php?flight=<?php echo urlencode($flight['id']); ?>">Manage</a>
+                                    <span> · </span>
+                                    <a href="preview_pass.php?flight=<?php echo urlencode($flight['flight_number']); ?>&amp;gate=<?php echo urlencode($flight['gate']); ?>&amp;name=PASSENGER&amp;class=ECONOMY">Preview</a>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -241,5 +253,53 @@ $flightCount = count($flights);
             <?php endif; ?>
         </div>
     </div>
+    <script>
+        (function(){
+            const terminal = <?php echo json_encode($terminal); ?>;
+            const refreshBtn = document.getElementById('refreshBtn');
+            const intervalLabel = document.getElementById('intervalLabel');
+            const tbody = document.getElementById('flight-table-body');
+            let interval = 15; // seconds
+
+            function renderRows(flights) {
+                if(!tbody) return;
+                tbody.innerHTML = '';
+                flights.forEach(function(f){
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td data-label="Flight">${escapeHtml(f.flight_number)}</td>
+                        <td data-label="Destination">${escapeHtml(f.destination)}</td>
+                        <td data-label="Gate">${escapeHtml(f.gate)}</td>
+                        <td data-label="Status"><span class="status">${escapeHtml(f.status)}</span></td>
+                        <td data-label="Departure">${escapeHtml(new Date(f.departure_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}))}</td>
+                        <td data-label="Actions"><a href="manage_passengers.php?flight=${encodeURIComponent(f.id)}">Manage</a> · <a href="preview_pass.php?flight=${encodeURIComponent(f.flight_number)}&gate=${encodeURIComponent(f.gate)}&name=PASSENGER&class=ECONOMY">Preview</a></td>
+                    `.trim();
+                    tbody.appendChild(tr);
+                });
+            }
+
+            function escapeHtml(s){
+                if(s === null || s === undefined) return '';
+                return String(s).replace(/[&<>"'`]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;","`":"&#96;"})[c]; });
+            }
+
+            async function fetchFlights(){
+                try{
+                    const res = await fetch('flights_api.php?terminal='+encodeURIComponent(terminal));
+                    if(!res.ok) return;
+                    const data = await res.json();
+                    if(data && data.flights) renderRows(data.flights);
+                }catch(e){
+                    console.error('fetchFlights', e);
+                }
+            }
+
+            refreshBtn && refreshBtn.addEventListener('click', function(e){ e.preventDefault(); fetchFlights(); });
+
+            // Auto refresh
+            setInterval(fetchFlights, interval * 1000);
+            intervalLabel && (intervalLabel.textContent = interval);
+        })();
+    </script>
 </body>
 </html>
