@@ -231,7 +231,11 @@ $flightCount = count($flights);
                                 <td data-label="Gate"><?php echo htmlspecialchars($flight['gate']); ?></td>
                                 <td data-label="Status"><span class="status"><?php echo htmlspecialchars($flight['status']); ?></span></td>
                                 <td data-label="Departure"><?php echo htmlspecialchars(date('H:i', strtotime($flight['departure_time']))); ?></td>
-                                <td data-label="Actions"><a href="manage_passengers.php?flight=<?php echo urlencode($flight['id']); ?>">Manage</a></td>
+                                <td data-label="Actions">
+                                    <a href="manage_passengers.php?flight=<?php echo urlencode($flight['id']); ?>">Manage</a>
+                                    <span> · </span>
+                                    <a href="preview_pass.php?flight=<?php echo urlencode($flight['flight_number']); ?>&amp;gate=<?php echo urlencode($flight['gate']); ?>&amp;name=PASSENGER&amp;class=ECONOMY">Preview</a>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
