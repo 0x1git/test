@@ -9,6 +9,44 @@ $message = '';
 $error = '';
 $service = new PassengerService($db);
 
+// CSV export handling (download passengers for a flight)
+if (isset($_GET['export']) && $_GET['export'] === 'csv' && isset($_GET['flight'])) {
+    $exportFlightId = (int) $_GET['flight'];
+    $csvStmt = $db->prepare('SELECT first_name, last_name, pnr_code, seat_number, checkin_status FROM passengers WHERE flight_id = ? ORDER BY last_name, first_name');
+    $csvStmt->execute([$exportFlightId]);
+    $rows = $csvStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="passengers_flight_' . $exportFlightId . '.csv"');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['First name', 'Last name', 'PNR', 'Seat', 'Check-in status']);
+    foreach ($rows as $r) fputcsv($out, [$r['first_name'], $r['last_name'], $r['pnr_code'], $r['seat_number'], $r['checkin_status']]);
+    fclose($out);
+    exit;
+}
+
+// Bulk update handling
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'bulk_update') {
+    $selected = $_POST['selected_passengers'] ?? [];
+    $bulkStatus = trim($_POST['bulk_status'] ?? '');
+    $allowed = ['Not Checked In', 'Checked In', 'Boarded', 'No Show'];
+    if (!empty($selected) && in_array($bulkStatus, $allowed, true)) {
+        // Build placeholders and params
+        $placeholders = rtrim(str_repeat('?,', count($selected)), ',');
+        $params = array_values($selected);
+        $sql = "UPDATE passengers SET checkin_status = ? WHERE id IN ($placeholders)";
+        $stmt = $db->prepare($sql);
+        $executeParams = array_merge([$bulkStatus], $params);
+        if ($stmt->execute($executeParams)) {
+            $message = 'Updated ' . count($selected) . ' passengers.';
+        } else {
+            $error = 'Bulk update failed.';
+        }
+    } else {
+        $error = 'No passengers selected or invalid status.';
+    }
+}
+
 $flightStmt = $db->prepare('SELECT id, flight_number, destination, gate, status, terminal FROM flights WHERE id = ? LIMIT 1');
 $flightStmt->execute([$flightId]);
 $flight = $flightStmt->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -259,35 +297,49 @@ if ($flight) {
                 </div>
 
                 <?php if ($passengers): ?>
-                    <table>
-                        <thead>
-                            <tr><th>Passenger</th><th>PNR</th><th>Seat</th><th>Check-in</th><th>Update</th></tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($passengers as $passenger): ?>
-                                <tr>
-                                    <td data-label="Passenger"><?php echo htmlspecialchars(trim($passenger['first_name'] . ' ' . $passenger['last_name'])); ?></td>
-                                    <td data-label="PNR"><?php echo htmlspecialchars($passenger['pnr_code']); ?></td>
-                                    <td data-label="Seat"><?php echo htmlspecialchars($passenger['seat_number']); ?></td>
-                                    <td data-label="Check-in"><span class="status"><?php echo htmlspecialchars($passenger['checkin_status']); ?></span></td>
-                                    <td data-label="Update">
-                                        <form method="post">
-                                            <input type="hidden" name="flight_id" value="<?php echo (int) $flight['id']; ?>">
-                                            <input type="hidden" name="passenger_id" value="<?php echo (int) $passenger['id']; ?>">
-                                            <select name="checkin_status">
-                                                <?php foreach (['Not Checked In', 'Checked In', 'Boarded', 'No Show'] as $option): ?>
-                                                    <option value="<?php echo htmlspecialchars($option); ?>" <?php echo $passenger['checkin_status'] === $option ? 'selected' : ''; ?>><?php echo htmlspecialchars($option); ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <div style="margin-top: 8px;">
-                                                <button type="submit">Save</button>
-                                            </div>
-                                        </form>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                    <form method="post" id="bulkForm">
+                        <input type="hidden" name="action" value="bulk_update">
+                        <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
+                            <select name="bulk_status" style="padding:8px;border-radius:8px;border:1px solid #d8e0ea;">
+                                <?php foreach (['Not Checked In', 'Checked In', 'Boarded', 'No Show'] as $option): ?>
+                                    <option value="<?php echo htmlspecialchars($option); ?>"><?php echo htmlspecialchars($option); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" class="button">Apply to selected</button>
+                            <a class="button secondary" href="?flight=<?php echo (int) $flight['id']; ?>&export=csv">Export CSV</a>
+                        </div>
+
+                        <table>
+                            <thead>
+                                <tr><th></th><th>Passenger</th><th>PNR</th><th>Seat</th><th>Check-in</th><th>Update</th></tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($passengers as $passenger): ?>
+                                    <tr>
+                                        <td data-label="Select"><input type="checkbox" name="selected_passengers[]" value="<?php echo (int)$passenger['id']; ?>"></td>
+                                        <td data-label="Passenger"><?php echo htmlspecialchars(trim($passenger['first_name'] . ' ' . $passenger['last_name'])); ?></td>
+                                        <td data-label="PNR"><?php echo htmlspecialchars($passenger['pnr_code']); ?></td>
+                                        <td data-label="Seat"><?php echo htmlspecialchars($passenger['seat_number']); ?></td>
+                                        <td data-label="Check-in"><span class="status"><?php echo htmlspecialchars($passenger['checkin_status']); ?></span></td>
+                                        <td data-label="Update">
+                                            <form method="post">
+                                                <input type="hidden" name="flight_id" value="<?php echo (int) $flight['id']; ?>">
+                                                <input type="hidden" name="passenger_id" value="<?php echo (int) $passenger['id']; ?>">
+                                                <select name="checkin_status">
+                                                    <?php foreach (['Not Checked In', 'Checked In', 'Boarded', 'No Show'] as $option): ?>
+                                                        <option value="<?php echo htmlspecialchars($option); ?>" <?php echo $passenger['checkin_status'] === $option ? 'selected' : ''; ?>><?php echo htmlspecialchars($option); ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <div style="margin-top: 8px;">
+                                                    <button type="submit">Save</button>
+                                                </div>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </form>
                 <?php else: ?>
                     <div class="no-data">No passengers are currently assigned to this flight.</div>
                 <?php endif; ?>
